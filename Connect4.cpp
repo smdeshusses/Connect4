@@ -3,161 +3,274 @@
 
 #include <iostream>
 #include <string>
-void printBoard(int board[7][6]);
-bool isGameOver(int board[7][6], bool lastPlayer, int last_x, int last_y);
+#include <array>
+#include <fstream>
+#include <math.h>
+#include <algorithm>
+#include <chrono>
+
+enum class PieceName { blank, p1, p2 };
+
+void printBoard(std::array<PieceName, 42> board);
+int findGameState(std::array<PieceName, 42> board);
+void local_play(std::array<PieceName, 42> board);
+std::array<PieceName, 42> generateBoard(std::string position);
+void testPositions(std::string fileName);
+int evaluatePosition(std::array<PieceName, 42> board, int numMoves);
+std::array<PieceName, 42> board = { PieceName::blank };
 
 int main()
 {
-    int board [7][6];
-    for (int j = 0; j < 6; j++) {
-        for (int i = 0; i < 7; i++) {
-            board[i][j] = 0;
-        }
-    }
-   // board[3][0] = 1;
-    //board[2][0] = 2;
-    //board[4][0] = 2;
-    //board[3][1] = 1;
-    //board[3][2] = 2;
-    //board[3][3] = 2;
-    bool turn = true;
-    printBoard(board);
 
-    int val;
-    while (true) {
-        std::cin >> val;
-        int y = 6;
-        if (val >= 1 && val <= 7) {
-            val--;
-            for (int j = 5; j >=0; j--) {
-                if (board[val][j] == 0) {
-                    y = j;
-                }
-            }
-            if (y != 6) {
-                board[val][y] = turn ? 1: 2;
-                if (isGameOver(board, turn, val, y)) {
-                    printBoard(board);
-                    std::cout << "Player " << (turn ? 1: 2) << " has won!" << std::endl;
-                    break;
-                }
-                turn = !turn;
-            }
-            else {
-                std::cout << "column full" << std::endl;
-            }
-        }
-        else {
-            std::cout << "Input column value from 1 to 7" << std::endl;
-        }
-        printBoard(board);
-    }
+	auto started = std::chrono::high_resolution_clock::now();
+	testPositions("Test_L3_R1.txt");
+	auto step1 = std::chrono::high_resolution_clock::now();
+	std::cout << "Searched test set in: " << std::chrono::duration_cast<std::chrono::milliseconds>(step1 - started).count() / 1000.0 << " seconds" << std::endl;
+
 }
 
 
+int evaluatePosition(std::array<PieceName, 42> board, int numMoves) { //need to implement minimax for optimal opponent gameplay in order to search correctly
 
-void printBoard(int board[7][6]) {
-    std::cout << "---------" << std::endl;
-    for (int j = 5; j >= 0; j--) {
-        std::cout << "|";
-        for (int i = 0; i <7; i++) {
-            if (board[i][j] == 0) {
-                std::cout << " ";
-            }
-            else if (board[i][j] == 1) {
-                std::cout << "X";
-            }
-            else if (board[i][j] == 2) {
-                std::cout << "O";
-            }
-        }
-        std::cout << "|" << std::endl;
-    }
+	int gameState = findGameState(board);
+	bool p1_turn = numMoves % 2 == 0 ? true : false;
 
-    std::cout << "---------" << std::endl;
-    std::cout << " 1234567 " << std::endl;
+	if (gameState == 1) {//p1 win
+		return -22 + (numMoves + 1) / 2;
+	}
+	else if (gameState == 2) {//p2 win
+		return -22 + (numMoves + 1) / 2;
+	}
+	else if (gameState == 3) { //tie
+		return 0;
+	}
+
+	else if (gameState == 0) {//game is not over
+		int result = -999;
+		for (int i = 0; i < 7; i++) { //try every possible column
+			int y = 6;
+			for (int j = 5; j >= 0; j--) {//get next move
+				if (board[7 * j + i] == PieceName::blank) {
+					y = j;
+				}
+			}
+			if (y < 6) {//if legal, try this move
+				std::array<PieceName, 42> b2 = board;
+				b2[7 * y + i] = p1_turn ? PieceName::p1 : PieceName::p2;
+				int n2 = numMoves + 1;
+				int val = -evaluatePosition(b2, n2);
+				if (val > result) {
+					result = val;
+				}
+			}
+		}
+		return result;
+	}
+
 }
 
-bool isGameOver(int board[7][6], bool lastPlayer, int last_x, int last_y) {
-    bool isOver = false;
-    int count = 0;
-    int player = lastPlayer ? 1 : 2;
-    //horizontal
-    for (int i = 0; i < 7; i++) {
-        if (board[i][last_y] == player) {
-            count++;
-        }
-        else {
-            count = 0;
-        }
-        if (count == 4) {
-            isOver = true;
-            break;
-        }
-    }
+void testPositions(std::string fileName) {
+	std::string line;
+	std::ifstream myfile(fileName); //ex: "Test_L1_R1.txt"
+	if (myfile.is_open())
+	{
+		while (getline(myfile, line))
+		{
+			int pos = line.find(" ");
+			std::string position = line.substr(0, pos);
+			std::string score = line.substr(pos + 1, line.size());
+			int result = evaluatePosition(generateBoard(position), position.length());
+			std::cout << position << ", " << result << '\n';
+		}
+		myfile.close();
+	}
+}
 
-    //vertical
-    count = 0;
-    for (int j = 0; j < 6; j++) {
-        if (board[last_x][j] == player) {
-            count++;
-        }
-        else {
-            count = 0;
-        }
-        if (count == 4) {
-            isOver = true;
-            break;
-        }
-    }
+std::array<PieceName, 42> generateBoard(std::string position) {
+	std::array<PieceName, 42> board = { PieceName::blank };
+	for (int q = 0; q < position.size(); q++) {
+		int i = (int)position[q] - 48 - 1;
+		int y = 5;
 
-    //diagonal 1 /
-    count = 0;
-    int start_x = last_x;
-    int start_y = last_y;
-    while (start_x != 0 && start_y != 0) {
-        start_x--;
-        start_y--;
-    }
-    while (start_x < 7 && start_y < 6) {
-        if (board[start_x][start_y] == player) {
-            count++;
-        }
-        else {
-            count = 0;
-        }
-        if (count == 4) {
-            isOver = true;
-            break;
-        }
+		for (int j = 5; j >= 0; j--) {
+			if (board[j * 7 + i] == PieceName::blank) {
+				y = j;
+			}
+			else {
+				break;
+			}
+		}
+		board[y * 7 + i] = (q % 2 == 0 ? PieceName::p1 : PieceName::p2);
+	}
+	return board;
+}
 
-        start_x++;
-        start_y++;
-    }
+void local_play(std::array<PieceName, 42> board) {
+	bool turn = true;
+	int i;
+	while (true) {
+		std::cin >> i;
+		int y = 6;
+		if (i >= 1 && i <= 7) {
+			i--;
+			for (int j = 5; j >= 0; j--) {
+				if (board[j * 7 + i] == PieceName::blank) {
+					y = j;
+				}
+			}
+			if (y != 6) {
+				board[y * 7 + i] = turn ? PieceName::p1 : PieceName::p2;
+				int state = findGameState(board);
+				if (state != 0) {
+					printBoard(board);
+					if (state == 3) {
+						std::cout << "Drawn Game! " << std::endl;
+					}
+					else {
+						std::cout << "Player " << state << " has won!" << std::endl;
+					}
+					break;
+				}
+				turn = !turn;
+			}
+			else {
+				std::cout << "column full" << std::endl;
+			}
+		}
+		else {
+			std::cout << "Input column value from 1 to 7" << std::endl;
+		}
+		printBoard(board);
+	}
+}
 
-    //diagonal 2 \ //
-    count = 0;
-    start_x = last_x;
-    start_y = last_y;
-    while (start_x != 0 && start_y != 5) {
-        start_x--;
-        start_y++;
-    }
-    while (start_x < 7 && start_y >=0) {
-        if (board[start_x][start_y] == player) {
-            count++;
-        }
-        else {
-            count = 0;
-        }
-        if (count == 4) {
-            isOver = true;
-            break;
-        }
 
-        start_x++;
-        start_y--;
-    }
+void printBoard(std::array<PieceName, 42> board) {
+	std::cout << "---------" << std::endl;
+	for (int j = 5; j >= 0; j--) {
+		std::cout << "|";
+		for (int i = 0; i < 7; i++) {
+			if (board[j * 7 + i] == PieceName::blank) {
+				std::cout << " ";
+			}
+			else if (board[j * 7 + i] == PieceName::p1) {
+				std::cout << "X";
+			}
+			else if (board[j * 7 + i] == PieceName::p2) {
+				std::cout << "O";
+			}
+		}
+		std::cout << "|" << std::endl;
+	}
 
-    return isOver;
+	std::cout << "---------" << std::endl;
+	std::cout << " 1234567 " << std::endl;
+}
+
+
+int findGameState(std::array<PieceName, 42> board) {
+
+	int gameState = 0;
+
+	//horizontal
+	for (int i = 0; i < 7; i++) {
+		PieceName lastSquare = PieceName::blank;
+		int counter = 1;
+		for (int j = 0; j < 6; j++) {
+			if (board[j * 7 + i] == lastSquare && lastSquare != PieceName::blank) {
+				counter++;
+			}
+			else {
+				lastSquare = board[j * 7 + i];
+				counter = 1;
+			}
+			if (counter == 4) {
+				gameState = (lastSquare == PieceName::p1 ? 1 : 2);
+				break;
+			}
+		}
+	}
+
+	//vertical
+	for (int j = 0; j < 6; j++) {
+		PieceName lastSquare = PieceName::blank;
+		int counter = 1;
+		for (int i = 0; i < 7; i++) {
+			if (board[j * 7 + i] == lastSquare && lastSquare != PieceName::blank) {
+				counter++;
+			}
+			else {
+				lastSquare = board[j * 7 + i];
+				counter = 1;
+			}
+			if (counter == 4) {
+				gameState = (lastSquare == PieceName::p1 ? 1 : 2);
+				break;
+			}
+		}
+	}
+
+	//diagonal 1 
+	for (int a = 0; a < 6; a++) {
+		PieceName lastSquare = PieceName::blank;
+		int counter = 1;
+		int x_coord = a <= 2 ? 0 : a - 2;
+		int y_coord = a >= 2 ? 5 : a + 3;
+		//std::cout << "( " << x_coord << ", " << y_coord << ")" << std::endl;
+
+		while (x_coord <= 6 && y_coord >= 0) {
+			if (board[y_coord * 7 + x_coord] == lastSquare && lastSquare != PieceName::blank) {
+				counter++;
+			}
+			else {
+				lastSquare = board[y_coord * 7 + x_coord];
+				counter = 1;
+			}
+			if (counter == 4) {
+				gameState = (lastSquare == PieceName::p1 ? 1 : 2);
+				break;
+			}
+
+			x_coord++;
+			y_coord--;
+		}
+	}
+	//diagonal 2
+	for (int a = 0; a < 6; a++) {
+		PieceName lastSquare = PieceName::blank;
+		int counter = 1;
+		int x_coord = a <= 2 ? 0 : a - 2;
+		int y_coord = a >= 2 ? 0 : 2 - a;
+
+		while (x_coord <= 6 && y_coord <= 5) {
+			if (board[y_coord * 7 + x_coord] == lastSquare && lastSquare != PieceName::blank) {
+				counter++;
+			}
+			else {
+				lastSquare = board[y_coord * 7 + x_coord];
+				counter = 1;
+			}
+			if (counter == 4) {
+				gameState = (lastSquare == PieceName::p1 ? 1 : 2);
+				break;
+			}
+
+			x_coord++;
+			y_coord++;
+		}
+	}
+
+	if (gameState == 0) {
+		bool fullBoard = true;
+		for (int i = 0; i < 7; i++) {
+			if (board[35 + i] == PieceName::blank) {
+				fullBoard = false;
+			}
+		}
+		if (fullBoard) {
+			gameState = 3;
+		}
+	}
+
+	return gameState;;
 }
