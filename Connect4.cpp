@@ -39,6 +39,23 @@ int evaluatePosition(std::array<PieceName, 42> board, int numMoves, int alpha, i
 
 	bool p1_turn = numMoves % 2 == 0 ? true : false;
 
+	for (int i = 0; i < 7; i++) { //try every possible column
+		int y = 6;
+		for (int j = 5; j >= 0; j--) {//get next move
+			if (board[7 * j + i] == PieceName::blank) {
+				y = j;
+			}
+		}
+		if (y < 6) {//if legal, try this move
+			std::array<PieceName, 42> b2 = board;
+			b2[7 * y + i] = p1_turn ? PieceName::p1 : PieceName::p2;
+			int n2 = numMoves + 1;
+			int gameState = findGameState2(b2, p1_turn, i, y);
+			if (gameState == 1 || gameState == 2) {
+				return 22 - (n2 + 1) / 2;
+			}
+		}
+	}
 
 	int result = -999;
 	for (int k = 0; k < 7; k++) { //try every possible column
@@ -240,7 +257,6 @@ int findGameState2(std::array<PieceName, 42> board, bool lastPlayer, int last_x,
 }
 
 int findGameState(std::array<PieceName, 42> board) {
-
 	int gameState = 0;
 
 	//horizontal
