@@ -48,7 +48,9 @@ int evaluatePosition(std::array<PieceName, 42> board, int numMoves, int alpha, i
 
 	else if (gameState == 0) {//game is not over
 		int result = -999;
-		for (int i = 0; i < 7; i++) { //try every possible column
+		for (int k = 0; k < 7; k++) { //try every possible column
+			int i = k % 2 == 0 ? (3 + (k + 1) / 2) : (3 - (k + 1) / 2);
+			
 			int y = 6;
 			for (int j = 5; j >= 0; j--) {//get next move
 				if (board[7 * j + i] == PieceName::blank) {
