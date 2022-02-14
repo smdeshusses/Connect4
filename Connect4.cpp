@@ -16,7 +16,7 @@ int findGameState(std::array<PieceName, 42> board);
 void local_play(std::array<PieceName, 42> board);
 std::array<PieceName, 42> generateBoard(std::string position);
 void testPositions(std::string fileName);
-int evaluatePosition(std::array<PieceName, 42> board, int numMoves);
+int evaluatePosition(std::array<PieceName, 42> board, int numMoves, int alpha, int beta);
 std::array<PieceName, 42> board = { PieceName::blank };
 
 int main()
@@ -24,13 +24,14 @@ int main()
 
 	auto started = std::chrono::high_resolution_clock::now();
 	testPositions("Test_L3_R1.txt");
+	//testPositions("miniSet.txt");
 	auto step1 = std::chrono::high_resolution_clock::now();
 	std::cout << "Searched test set in: " << std::chrono::duration_cast<std::chrono::milliseconds>(step1 - started).count() / 1000.0 << " seconds" << std::endl;
 
 }
 
 
-int evaluatePosition(std::array<PieceName, 42> board, int numMoves) { //need to implement minimax for optimal opponent gameplay in order to search correctly
+int evaluatePosition(std::array<PieceName, 42> board, int numMoves, int alpha, int beta) { //need to implement minimax for optimal opponent gameplay in order to search correctly
 
 	int gameState = findGameState(board);
 	bool p1_turn = numMoves % 2 == 0 ? true : false;
@@ -58,13 +59,16 @@ int evaluatePosition(std::array<PieceName, 42> board, int numMoves) { //need to 
 				std::array<PieceName, 42> b2 = board;
 				b2[7 * y + i] = p1_turn ? PieceName::p1 : PieceName::p2;
 				int n2 = numMoves + 1;
-				int val = -evaluatePosition(b2, n2);
-				if (val > result) {
-					result = val;
+				int val = -evaluatePosition(b2, n2, -beta, -alpha);
+				if (val >= beta) {
+					return beta;
+				}
+				if (val > alpha) {
+					alpha = val;
 				}
 			}
 		}
-		return result;
+		return alpha;
 	}
 
 }
@@ -79,7 +83,7 @@ void testPositions(std::string fileName) {
 			int pos = line.find(" ");
 			std::string position = line.substr(0, pos);
 			std::string score = line.substr(pos + 1, line.size());
-			int result = evaluatePosition(generateBoard(position), position.length());
+			int result = evaluatePosition(generateBoard(position), position.length(), -42, 42);
 			std::cout << position << ", " << result << '\n';
 		}
 		myfile.close();
