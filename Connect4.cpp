@@ -16,6 +16,7 @@ void printBitBoard(uint64_t position);
 bool findGameState(uint64_t position, uint64_t mask);
 void testPositions(std::string fileName);
 void printBitBoard(uint64_t position, uint64_t mask);
+int runPosition(uint64_t position, uint64_t mask, short numMoves);
 uint64_t checkFutureLoss(uint64_t position, uint64_t mask); //unused
 void setLookupBits(); //unused
 void setBitCount(); //unused
@@ -33,7 +34,6 @@ std::unordered_set<uint64_t> bitCount; //unused
 /* Future optimizations:
 * Better lookahead for losing moves. So far have not been able to make this fast
 * Would checking for and avoiding horizontally symmetric positions give improved performance? Doubtful
-* Iterative deepening to search more shallowly and narrow the search window
 * Improved move ordering using heat map. Might be too computationally expensive if curent movecount is high
 * Improved move ordering to proritize moves that could lead to 4 in a row
 * Parallelize. My computer has 12 threads and 6 cores
@@ -44,7 +44,7 @@ std::unordered_set<uint64_t> bitCount; //unused
 int main()
 {
 	auto started = std::chrono::high_resolution_clock::now();
-	testPositions("Test_L2_R2.txt");
+	testPositions("Test_L2_R1.txt");
 	auto step1 = std::chrono::high_resolution_clock::now();
 	std::cout << "Searched " << totalNodeCount << " nodes in: " << totalTime / 1000.0 << " seconds" << std::endl;
 	std::cout << "Elapsed time: " << std::chrono::duration_cast<std::chrono::milliseconds>(step1 - started).count() / 1000.0 << " seconds" << std::endl;
@@ -56,6 +56,26 @@ int evaluatePosition(uint64_t position, uint64_t mask, short numMoves, short alp
 	uint64_t key = position + mask + BOTTOM_ROW;
 	nodeCount++; //count nodes searched
 	bool p1_turn = numMoves % 2 == 0 ? true : false;
+	int max = 21 - (numMoves) / 2;	// upper bound of score since player cannot win immediately
+	int min = -21 + (numMoves) / 2;	// lower bound of score since player cannot win immediately
+	uint64_t hit = table[key % table_size]; //search transposition table for key
+	if (hit >> 7 == key) { // transposition table is stored as a 64 bit value: '0000 0000' '49 bit key' '7 bit alpha or beta'
+		int val = (int)(hit & 127ULL);
+		if (val <= 44) {
+			max = val - 22;
+			if (beta > max) { // there is no need to keep beta above our max possible score.
+				beta = max;
+				if (alpha >= beta) return beta;
+			}
+		}
+		else {
+			min = val - 66;
+			if (alpha < min) {  // there is no need to keep alpha below our min possible score.
+				alpha = min;
+				if (alpha >= beta) return alpha;
+			}
+		}
+	}
 	// TODO: Lookahead. If no win, check if the original position has 2+ availabilities for the opponent and if so, return a loss. So far implementation has been too slow.
 	for (int i = 0; i < 7; i++) { //try every possible column
 		uint64_t column = (mask >> (i * 7)) & 63ULL; // Get value of the mask of the column in question. For example: 
@@ -79,26 +99,6 @@ int evaluatePosition(uint64_t position, uint64_t mask, short numMoves, short alp
 		}
 	}
 
-	int max = 21 - (numMoves) / 2;	// upper bound of score since player cannot win immediately
-	int min = -21 + (numMoves) / 2;	// lower bound of score since player cannot win immediately
-	uint64_t hit = table[key % table_size]; //search transposition table for key
-	if (hit >> 7 == key) { // transposition table is stored as a 64 bit value: '0000 0000' '49 bit key' '7 bit alpha or beta'
-		int val = (int)(hit & 127ULL);
-		if (val <= 44) {
-			max = val - 22;
-			if (beta > max) { // there is no need to keep beta above our max possible score.
-				beta = max;
-				if (alpha >= beta) return beta;
-			}
-		}
-		else {
-			min = val - 66;
-			if (alpha < min) {  // there is no need to keep alpha below our min possible score.
-				alpha = min;
-				if (alpha >= beta) return alpha;
-			}
-		}
-	}
 
 	for (int k = 0; k < 7; k++) { //try every possible column
 		int i = k % 2 == 0 ? (3 + (k + 1) / 2) : (3 - (k + 1) / 2); //search center columns first
@@ -141,6 +141,20 @@ int evaluatePosition(uint64_t position, uint64_t mask, short numMoves, short alp
 	table[key % table_size] = entry; //save upper bound
 	return alpha; //note that alpha and beta switch every turn, so alpha is always returned because that is always the best move of the maximizing player
 
+}
+
+int runPosition(uint64_t position, uint64_t mask, short numMoves) {
+	int min = -21;
+	int max = 21;
+	while (min < max) {                    // narrow minimax window. From Pascal Pons
+		int med = min + (max - min) / 2;
+		if (med <= 0 && min / 2 < med) med = min / 2;
+		else if (med >= 0 && max / 2 > med) med = max / 2;
+		int r = evaluatePosition(position, mask, numMoves, med, med + 1);   // use a null depth window to know if the actual score is greater or smaller than med
+		if (r <= med) max = r;
+		else min = r;
+	}
+	return min;
 }
 
 void printBitBoard(uint64_t position) { // prints the bitboard for debugging 
@@ -202,7 +216,7 @@ void testPositions(std::string fileName) { //this should be improved but since t
 			}
 			nodeCount = 0;
 			auto started = std::chrono::high_resolution_clock::now();
-			int result = evaluatePosition(position, mask, (short)(movesPlayed.length()), -21, 21); //recursive call to determine position score
+			int result = runPosition(position, mask, short(movesPlayed.length()));
 			auto step1 = std::chrono::high_resolution_clock::now();
 			totalTime += std::chrono::duration_cast<std::chrono::milliseconds>(step1 - started).count(); // only count evaluatePosition() time
 			totalNodeCount += nodeCount;
