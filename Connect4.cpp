@@ -13,13 +13,11 @@ const uint64_t BOTTOM_ROW = 4432676798593;
 
 int evaluatePosition(uint64_t position, uint64_t mask, short numMoves, short alpha, short beta);
 void printBitBoard(uint64_t position);
-bool findGameState(uint64_t position, uint64_t mask);
+bool findGameState(uint64_t position, uint64_t mask); //now unused!
 void testPositions(std::string fileName);
 void printBitBoard(uint64_t position, uint64_t mask);
 int runPosition(uint64_t position, uint64_t mask, short numMoves);
-uint64_t checkFutureLoss(uint64_t position, uint64_t mask); //unused
-void setLookupBits(); //unused
-void setBitCount(); //unused
+uint64_t checkFutureLoss(uint64_t position, uint64_t mask);
 uint64_t nodeCount = 0;
 uint64_t totalTime = 0;
 uint64_t totalNodeCount = 0;
@@ -43,8 +41,29 @@ std::unordered_set<uint64_t> bitCount; //unused
 
 int main()
 {
+	/*
+	uint64_t pos = 9013612334262;
+	uint64_t mask = 66503138336703;
+	uint64_t pos_p2 = pos ^ mask;
+	printBitBoard(pos);
+	std::cout << "\n";
+	printBitBoard(mask);
+	std::cout << "\n";
+	printBitBoard(pos_p2);
+	std::cout << "\n";
+	uint64_t r = checkFutureLoss(pos_p2, mask);
+	uint64_t r2 = r & (r - 1);
+	printBitBoard(r);
+	std::cout << "\n";
+	printBitBoard(r2);*/
+
+	//uint64_t r = 16;
+	//uint64_t c1 = lookupBits[r & 127UL] + lookupBits[(r >> 7) & 127UL] + lookupBits[(r >> 14) & 127UL] +
+	//	lookupBits[(r >> 21) & 127UL] + lookupBits[(r >> 28) & 127UL] + lookupBits[(r >> 35) & 127UL] + lookupBits[(r >> 42) & 127UL];
+	//std::cout << (c1);
+	
 	auto started = std::chrono::high_resolution_clock::now();
-	testPositions("Test_L2_R1.txt");
+	testPositions("Test_L2_R2.txt");
 	auto step1 = std::chrono::high_resolution_clock::now();
 	std::cout << "Searched " << totalNodeCount << " nodes in: " << totalTime / 1000.0 << " seconds" << std::endl;
 	std::cout << "Elapsed time: " << std::chrono::duration_cast<std::chrono::milliseconds>(step1 - started).count() / 1000.0 << " seconds" << std::endl;
@@ -52,7 +71,6 @@ int main()
 
 
 int evaluatePosition(uint64_t position, uint64_t mask, short numMoves, short alpha, short beta) {
-
 	uint64_t key = position + mask + BOTTOM_ROW;
 	nodeCount++; //count nodes searched
 	bool p1_turn = numMoves % 2 == 0 ? true : false;
@@ -76,34 +94,33 @@ int evaluatePosition(uint64_t position, uint64_t mask, short numMoves, short alp
 			}
 		}
 	}
-	// TODO: Lookahead. If no win, check if the original position has 2+ availabilities for the opponent and if so, return a loss. So far implementation has been too slow.
-	for (int i = 0; i < 7; i++) { //try every possible column
-		uint64_t column = (mask >> (i * 7)) & 63ULL; // Get value of the mask of the column in question. For example: 
-															   // A column with 3 pieces in it and an empty 4th row would be "0000111". 0111111 = 63 = full
-		if (column != 63) { //check column has room for a piece
-			uint64_t addition = (column + 1) << (i * 7); // create number equivalent to the next piece. For example "0000111" would give "0001000", which added or ORed with the mask will add a piece to it
-			uint64_t position2 = position;
-			uint64_t mask2 = mask;
-			mask2 += addition; // add piece to mask
-			if (p1_turn) {
-				position2 += addition; // add piece to position, if it is p1's turn
-			}
-			if (!p1_turn) { //
-				position2 ^= mask2; // XOR position if it is p2's turn, since the position input is always from p1's point of view
-			}
-			
-			bool gameState = findGameState(position2, mask2); // if adding a piece would yield a win, return the heuristic here so that the other columns are not checked
-			if (gameState) {
-				return 21 - (numMoves) / 2;
+
+	// Lookahead. If no win, check if the original position has 2+ availabilities for the opponent and if so, return a loss. So far implementation has been too slow.
+	uint64_t temp_pos = position;
+	if (!p1_turn) {
+		temp_pos ^= mask;
+	}
+	if (checkFutureLoss(temp_pos, mask)!=0) { //check if player has a win
+		int alpha = 21 - (numMoves) / 2;
+		return alpha;
+	}
+	else {//no win for current player, check opposite player
+		temp_pos ^= mask;
+		uint64_t temp_result = checkFutureLoss(temp_pos, mask);
+		if (temp_result!=0) {
+			if ((temp_result & (temp_result - 1)) != 0) { //if at least two 1s
+				int beta = -21 + (numMoves +1) / 2;
+				return beta;
 			}
 		}
 	}
 
-
+//sort column priority by forming column values as: score_col   'score bits' 'new piece height' 'column number'. Sort by value to get largest scores first, then extract the piece hieght and col value
 	for (int k = 0; k < 7; k++) { //try every possible column
 		int i = k % 2 == 0 ? (3 + (k + 1) / 2) : (3 - (k + 1) / 2); //search center columns first
 
-		uint64_t column = (mask >> (i * 7)) & 63ULL; //get mask of a column (see above comments)
+		uint64_t column = (mask >> (i * 7)) & 63ULL; // Get value of the mask of the column in question. For example: 
+															   // A column with 3 pieces in it and an empty 4th row would be "0000111". 0111111 = 63 = full
 		if (column != 63) { //check column has room
 			uint64_t addition = (column + 1) << (i * 7); //get value for adding a piece
 			uint64_t position2 = position;
@@ -112,29 +129,20 @@ int evaluatePosition(uint64_t position, uint64_t mask, short numMoves, short alp
 			if (p1_turn) {
 				position2 += addition; //get p2 board
 			}
+			if ((mask2 & 141845657554976ULL) == 141845657554976ULL) return 0; // if the top row is full, return a tie immediately 
 
 			int n2 = numMoves + 1;
-			int val = -evaluatePosition(position2, mask2, n2, -beta, -alpha); // recursive negamax recursive call
+			int val = -evaluatePosition(position2, mask2, n2, -beta, -alpha); // recursive negamax call
 
-			if ((mask2 & 141845657554976ULL) == 141845657554976ULL) return 0; // if the top row is full, return a tie immediately 
-			if (!p1_turn) {
-				position2 ^= mask2; // XOR position if it is p2's turn, since the position input is always from p1's point of view
+			if (val >= beta) { // prune paths where val >= beta
+				uint64_t entry = key << 7 | (val + 66);
+				table[key % table_size] = entry; //save lower bound
+				return val;
+			}
+			if (val > alpha) { // increase alpha if there is a better move found
+				alpha = val;
 			}
 
-			bool gameState = findGameState(position2, mask2); // test for a win
-			if (gameState) { //if the player that just placed a piece wins, gameState will be true and we return the heuristic
-				return 22 - (n2 + 1) / 2;
-			}
-			else {
-				if (val >= beta) { // prune paths where val >= beta
-					uint64_t entry = key << 7 | (val + 66);
-					table[key % table_size] = entry; //save lower bound
-					return val;
-				}
-				if (val > alpha) { // increase alpha if there is a better move found
-					alpha = val;
-				}
-			}
 		}
 	}
 	uint64_t entry = key << 7 | (alpha + 22); //make entry with offset so that alpha+22 is always positive (no signed bit)
@@ -271,8 +279,7 @@ bool findGameState(uint64_t position, uint64_t mask) {
 }
 
 uint64_t checkFutureLoss(uint64_t position, uint64_t mask) {
-	//assume it is always p1's turn
-	//vertical
+	//checks for player 1
 	uint64_t sq = (position << 1) & (position << 2) & (position << 3); //checks 3 squares under the one it flags
 
 	//horizontal
@@ -288,7 +295,7 @@ uint64_t checkFutureLoss(uint64_t position, uint64_t mask) {
 	sq2 = (position << 6) & (position << 12); // _XX
 	sq |= sq2 & (position << 18); // _XXX
 	sq |= sq2 & (position >> 6); // X_XX
-	sq2 >>= 18; 
+	sq2 >>= 18;
 	sq |= sq2 & (position >> 18); // XXX_
 	sq |= sq2 & (position << 6); // XX_X
 
@@ -296,37 +303,9 @@ uint64_t checkFutureLoss(uint64_t position, uint64_t mask) {
 	sq2 = (position << 8) & (position << 16); // _XX
 	sq |= sq2 & (position << 24); // _XXX
 	sq |= sq2 & (position >> 8); // X_XX
-	sq2 >>= 24; 
+	sq2 >>= 24;
 	sq |= sq2 & (position >> 24); // XXX_
 	sq |= sq2 & (position << 8); // XX_X
 
 	return sq & 279258638311359ULL & (~mask) & (mask + BOTTOM_ROW); // not ideal...
-}
-
-void setLookupBits() {
-	memset(lookupBits, 0, 256); //most are 0
-	lookupBits[1] = 1;
-	lookupBits[3] = 1;
-	lookupBits[7] = 1;
-	lookupBits[15] = 1;
-	lookupBits[31] = 1;
-	lookupBits[63] = 1;
-	lookupBits[127] = 1; //unnecessary
-}
-
-void setBitCount() { 
-	auto numRows = 7;
-	auto numCols = 7;
-	std::vector<uint64_t> test;
-	for (auto i = 0; i < numCols - 1; i++) {
-		for (auto j = i + 1; j < numCols; j++) {//i and j are two different columns that need to place a "1"
-			for (auto a = 0; a < numRows - 1; a++) { // a and b are the heights at which the "1" will be placed in i and j, respectively
-				for (auto b = 0; b < numRows - 1; b++) {
-					uint64_t val = 1ULL << (i * numRows + a);
-					val |= 1ULL << (j * numRows + b);
-					bitCount.insert(val);
-				}
-			}
-		}
-	}
 }
